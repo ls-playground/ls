@@ -1,0 +1,42 @@
+name: Sync Project Cards
+
+on:
+  issues:
+    types: [labeled]
+
+jobs:
+  set-column:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        mapping:
+          - {issue_label: "status: triage needed", project_status: "status: triage needed ❓"}
+          - {issue_label: "status: response required", project_status: "status: response required 🗨"}
+          - {issue_label: "status: resolved/stale", project_status: "status: stale 😴"}
+          - {issue_label: "status: resolved/fixed", project_status: "status: closed ✔"}
+          - {issue_label: "status: resolved/workaround", project_status: "status: closed ✔"}
+          - {issue_label: "status: confirmed", project_status: "status: backlog 🗃"}
+          - {issue_label: "status: accepted", project_status: "status: backlog 🗃"}
+          - {issue_label: "status: stale", project_status: "status: stale 😴"}
+    name: ${{ matrix.mapping.issue_label }}
+    steps:
+      - name: Generate Token
+        if: github.event.label.name == matrix.mapping.issue_label
+        id: generate_token
+        uses: tibdex/github-app-token@b62528385c34dbc9f38e5f4225ac829252d1ea92
+        with:
+          app_id: ${{ secrets.PROJECT_SYNC_APP_ID }}
+          private_key: ${{ secrets.PROJECT_SYNC_APP_PEM }}
+
+      - name: Sync Card Status
+        if: github.event.label.name == matrix.mapping.issue_label
+        uses: leonsteinhaeuser/project-beta-automations@v2.1.0
+        env:
+          DEBUG_LOG: "true"
+        with:
+          gh_token: ${{ steps.generate_token.outputs.token }}
+          organization: ls-playground
+          project_id: 1
+          resource_node_id: ${{ github.event.issue.node_id }}
+          status_value: ${{ matrix.mapping.project_status }}
