@@ -2,7 +2,7 @@ name: Sync Project Cards
 
 on:
   issues:
-    types: [labeled]
+    types: [labeled, unlabeled, edited]
 
 concurrency:
     group: ${{ github.workflow }}-${{ github.event.issue.node_id }}
@@ -11,22 +11,38 @@ concurrency:
 jobs:
   set-column:
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        mapping:
-          - {issue_label: "status: triage needed", project_status: "status: triage needed ❓"}
-          - {issue_label: "status: response required", project_status: "status: response required 🗨"}
-          - {issue_label: "status: resolved/stale", project_status: "status: stale 😴"}
-          - {issue_label: "status: resolved/fixed", project_status: "status: closed ✔"}
-          - {issue_label: "status: resolved/workaround", project_status: "status: closed ✔"}
-          - {issue_label: "status: confirmed", project_status: "status: backlog 🗃"}
-          - {issue_label: "status: accepted", project_status: "status: backlog 🗃"}
-          - {issue_label: "status: stale", project_status: "status: stale 😴"}
-    name: ${{ matrix.mapping.issue_label }}
     steps:
+      - name: Project status change necessary?
+        uses: actions/github-script@v6
+        id: determine-status
+        with:
+          script: |
+            const listLabelsOnIssueResponse = await github.rest.issues.listLabelsOnIssue({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+            });
+            const issueLabels = listLabelsOnIssueResponse.data.map(e => e.name);
+            const mapping = {
+                "status: triage needed": "status: triage needed ❓",
+                "status: confirmed": "status: backlog 🗃",
+                "status: accepted": "status: backlog 🗃",
+                "status: stale": "status: stale 😴",
+                "status: response required": "status: response required 🗨",
+                "status: resolved/stale": "status: stale 😴",
+                "status: resolved/fixed": "status: closed ✔",
+                "status: resolved/workaround": "status: closed ✔"
+            };
+            let result = false;
+            for (const label in mapping) {
+              if (issueLabels.includes(label)) {
+                result = mapping[label]
+              }
+            }
+            return result
+
       - name: Generate Token
-        if: github.event.label.name == matrix.mapping.issue_label
+        if: ${{steps.determine-status.outputs.result}}
         id: generate_token
         uses: tibdex/github-app-token@b62528385c34dbc9f38e5f4225ac829252d1ea92
         with:
@@ -34,7 +50,7 @@ jobs:
           private_key: ${{ secrets.PROJECT_SYNC_APP_PEM }}
 
       - name: Sync Card Status
-        if: github.event.label.name == matrix.mapping.issue_label
+        if: ${{steps.determine-status.outputs.result}}
         uses: leonsteinhaeuser/project-beta-automations@v2.1.0
         env:
           DEBUG_LOG: "true"
@@ -43,4 +59,4 @@ jobs:
           organization: ls-playground
           project_id: 1
           resource_node_id: ${{ github.event.issue.node_id }}
-          status_value: ${{ matrix.mapping.project_status }}
+          status_value: ${{steps.determine-status.outputs.result}}
