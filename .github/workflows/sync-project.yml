@@ -4,10 +4,6 @@ on:
   issues:
     types: [labeled, unlabeled, edited]
 
-concurrency:
-    group: ${{ github.workflow }}-${{ github.event.issue.node_id }}
-    cancel-in-progress: true
-
 jobs:
   sync-project-card:
     runs-on: ubuntu-latest
@@ -16,6 +12,7 @@ jobs:
         uses: actions/github-script@v6
         id: determine-status
         with:
+          result-encoding: string
           script: |
             // Get the labels on the issue
             const listLabelsOnIssueResponse = await github.rest.issues.listLabelsOnIssue({
